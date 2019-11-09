@@ -29,7 +29,7 @@ options(scipen = 10) #this gets rid of scientific notation for very small p's
 ```
 # Introduction
 
-This document provides a step-by-step comprehensive process for completing the MHS7730 Advanced Research dataset work in R. For access to the RMarkdown file, see: https://github.com/gcasteleiro/adv_research. 
+This document provides a step-by-step comprehensive process for completing the MHS7730 Advanced Research dataset work in R. For access to the RMarkdown file, see: https://github.com/gcasteleiro/adv_research.
 
 # Dataset 1 - Multiple Regression 
 
