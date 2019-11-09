@@ -1,0 +1,776 @@
+---
+title: "Advanced Research Dataset Homeworks"
+author: "Gerardo A. Casteleiro, MS, LMHC"
+date: "10/29/2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE} 
+#load all packages
+library(tidyverse) #data wrangling
+library(gvlma) #linear model assumptions
+library(car) #for leveneTest()
+library(haven) #reading in data (read_sav())
+library(ez) #repeated measures ANOVA
+library(reshape) #for `melt()`
+library(regclass) #for `confusion_matrix()`
+library(rms) #for `lrm()`
+library(psych) #factor analysis
+library(GPArotation) #factor analysis
+library(paran) #Horn's parallel analysis 
+library(sjstats) #anova_stats() provides effect sizes 
+options(tinytex.verbose = TRUE)
+```
+# Introduction
+
+This document provides a step-by-step comprehensive process for completing the MHS7730 Advanced Research dataset work in R. For access to the RMarkdown file, see: https://github.com/gcasteleiro/adv_research. 
+
+# Dataset 1 - Multiple Regression 
+
+### 1. Load the data file called EX9Q1.sav. This is a demonstration data file which for many years was supplied with every copy of SPSS (and called ‘1991 U.S. General Social Survey.sav’) but is not with recent versions. 
+
+### 1.a. Open the data file and familiarise yourself with the variables. This file contains more than 40 variables for each of about 1500 respondents.  
+
+```{r}
+#import the dataset
+EX9Q1 <- read_sav("EX9Q1(1).sav")
+
+#check for missing data
+any(is.na(EX9Q1))
+
+#check the data variable names
+names(EX9Q1)
+
+#count missing data
+length(which(is.na(EX9Q1)))
+
+```
+
+### 1.b. The variable “prestg80” is a scale variable which codes the respondent’s occupational prestige score (a higher value indicates a more prestigious occupation). We are going to investigate which other variables predict the occupational prestige score. Undertake a multiple regression to determine whether occupational prestige is predicted by the variables listed below, but first check the nominal variables for whether or not they are dichotomous (for example, use Frequencies). You will find one that is not dichotomous, and you should decide how to deal with that. You could: produce dummy variables; collapse two categories into one; or, as one category has proportionately low N, just exclude that category. Justify your decision. Predictors: respondent’s sex, their race, their general happiness (happy), the number of children they have (childs), the highest year of school completed (educ), and whether the respondent takes illegal drugs (hth5) or has a drinking problem (hlth4)
+
+Below the data is checked. Then the multiple regression model with `lm` (linear model) is fitted and tested. 
+
+```{r, fig.width=2, fig.height=3}
+#check nominal variables for dichotomy 
+table(EX9Q1$sex)
+table(EX9Q1$happy) #level of happiness
+table(EX9Q1$childs) #no. of children
+table(EX9Q1$educ) #highest yr hs completed
+table(EX9Q1$hlth5) #illegal drugs
+table(EX9Q1$hlth4) #drinking problem
+
+tablist <- list(
+table(EX9Q1$sex),
+table(EX9Q1$happy), #level of happiness
+table(EX9Q1$childs), #no. of children
+table(EX9Q1$educ), #highest yr hs completed
+table(EX9Q1$hlth5), #illegal drugs
+table(EX9Q1$hlth4) #drinking problem
+)
+#plots
+for(i in 1:length(tablist)){
+  barplot(tablist[[i]])
+}
+
+#OR: lapply(tablist,barplot)
+
+table(EX9Q1$race) #race is nominal and not dichotomous (1 = "white" 2 = "black" 3 = "other")
+#for race variable, use: as.factor(EX9Q1$race)
+
+#fit model
+mr.fit <- lm(formula = prestg80 ~ sex + happy + childs + educ + hlth5 + 
+    hlth4 + as.factor(race), data = EX9Q1)
+#check model
+summary(mr.fit)
+```
+
+We can go some steps further. Just because this model is significant doesn't mean it's the one we should use; it's definitely not the most parsimonious. 
+
+```{r}
+#backward model selection could result in a better model 
+#(feel free to skip this entire section)
+
+drop1(mr.fit)
+
+###AIC is the Akaike Information Criterion, which points to the relative quality 
+###of statistical models in a given dataset. The lowest AIC can be taken out in the 
+###next model.
+
+mr.fit2 <- lm(prestg80 ~ happy + childs + educ + hlth5 + hlth4 + 
+                as.factor(race), data = EX9Q1)
+
+summary(mr.fit2)
+
+drop1(mr.fit2)
+
+mr.fit3 <- lm(prestg80 ~ happy + educ + hlth5 + hlth4 + as.factor(race), data = EX9Q1)
+
+summary(mr.fit3)
+
+drop1(mr.fit3)
+
+mr.fit4 <- lm(prestg80 ~ happy + educ + hlth5 + as.factor(race), data = EX9Q1)
+
+summary(mr.fit4) 
+
+drop1(mr.fit4)
+
+mr.fit5 <- lm(prestg80 ~ educ + hlth5 + as.factor(race), data = EX9Q1)
+
+summary(mr.fit5)
+#test assumptions
+gvlma(mr.fit5) #acceptable
+
+#there's a more streamline way to do this with udpate(), but I did it manually to 
+#show the iterative process
+
+#example
+test <- update(mr.fit, .~. - educ)
+summary(test)
+```
+
+### 1.c. Report the results of the analysis. 
+
+In the selected model (`mr.fit5`), highest year of school completed (`educ`), illegal drugs (`hlth5`) and (`race`) significantly accounted for approximately 28% of the variance of occupational prestige (`prestg80`). The model was significant, (\(F\)(4,940) = 93.61, \(p\) < .001).
+
+### 1.d. Repeat this analysis separately for men and women. Are there any major differences in
+the pattern of results for these two groups?
+
+We separate the data using pipes `%>%` and the `tidyverse` package (`dyplr`)
+
+```{r}
+men.data <- EX9Q1 %>% filter(sex == 1)
+men.fit <- lm(prestg80 ~ happy + childs + educ + hlth5 + hlth4 + 
+                as.factor(race), data = men.data)
+summary(men.fit)
+```
+
+It seems that for men, education, drug use and race are highly predictive of occupational prestige score; they account for approximately 29% of the variance of job prestige, and the model was significant (\(F\)(7,393) = 24.54, \(p\) < .001).
+
+```{r}
+women.data <- EX9Q1 %>% filter(sex == 2)
+women.fit <- lm(prestg80 ~ happy + childs + educ + hlth5 + hlth4 + as.factor(race), data = women.data)
+summary(women.fit)
+```
+
+On the other hand, for women, education alone seems to account for occupational prestige score, the model accounts for approximately 30% of the variance, and is significant (\(F\)(7,524) = 32.01, \(p\) < .001). Drug use also seems to be suggestive, but is not significant at the 0.05 alpha.
+
+\clearpage
+
+# Dataset 2 - Analyses of Variance 
+
+### 1. Load the data file Ex8Q1.sav. This file contains the data collected during a study of the effects of time on memory for details of a crime. A total of thirty five participants watched a video of a crime. They were then interviewed either one, two or three days later. Participants’ memory for the details of the crime was scored out of a total of 50. 
+
+```{r, include=FALSE}
+Ex8Q1 <- read_sav("Ex8Q1.sav")
+Ex8Q2 <- read_sav("Ex8Q2.sav")
+```
+
+### 1.a. First, to check whether the allocation of participants to conditions was random, compare the age of the participants in the three groups. Is the result good news for the experimenters?
+
+Compare age of participants in groups:
+
+```{r}
+na.omit(Ex8Q1) %>% 
+  group_by(Delay)%>%
+  dplyr::select(Age)%>%
+  summarize_all(mean)
+#good news for experiments. Mean age is about the same for all three grps
+```
+
+```{r}
+#confirm using base R
+mean(na.omit(Ex8Q1[Ex8Q1$Delay == 1,]$Age))
+mean(na.omit(Ex8Q1[Ex8Q1$Delay == 2,]$Age))
+mean(na.omit(Ex8Q1[Ex8Q1$Delay == 3,]$Age))
+```
+
+### 1.b. Now test the hypothesis that the duration of the delay between encoding and recall will affect the accuracy of recall. Report the result of your analysis.
+
+Fit ANOVA model
+
+```{r}
+aov.fit <- aov(Recall~as.factor(Delay), data = Ex8Q1)
+
+#summary
+summary(aov.fit)
+```
+
+The duration of delay between encoding and recall will affect the accuracy of recall (\(F\)(2,32) = 21.5, \(p\) < .001). 
+
+### 1.c. Produce a graph showing recall at each delay, and perform post-hoc tests to determine whether each increase in delay results in a significant decrease in recall. 
+
+Graph 
+
+```{r, fig.cap="Graph depicting the effects of delay on recall"}
+boxplot(Recall~Delay, data = Ex8Q1, pch = 20, main = "Delay's Effects on Recall")
+```
+
+Now we confirm with a post-hoc test: 
+
+```{r}
+#Tukey Honest Significant Differences test
+TukeyHSD(aov.fit)
+cohen.d(Ex8Q1[,4:5],"Delay")
+```
+
+Differences in 1-2 and 1-3 are significant, but 2-3 is not. Overall, delay has a major detrimental effect on recall (Cohen's \(d\) = -1.8). 
+
+### 2. A psychologist is evaluating a prison-based treatment program for violent offenders serving long sentences. The psychologist was given access to the prison records which included information about any official reprimands received, or misdemeanours committed by the offenders. She used this information to calculate a behaviour score for each offender (high value indicates poor behaviour). The psychologist calculated this score for the year immediately prior to treatment, for the year of treatment and for each of the first and second years following treatment. The file Ex8Q2.sav contains the data from 12 prisoners.
+
+### 2.a. Does the behaviour score change significantly across the four years?
+
+Probably the easiest way to see the change is with a boxplot (HOW we should find out was not specified). 
+
+```{r}
+boxplot(Ex8Q2[,-1], cex.axis = 0.75, main = "Prisoner Bx Change Over Time") 
+#1st column is ID so we take it out with subsetting [,-1].
+```
+
+In order to use the ezANOVA function in "ez" package, we need "long" data this means that each kind of treatment for each prisoner needs to have its own column. We use the `reshape` package to `melt` the data. 
+
+```{r}
+ldata <- melt(data.frame(Ex8Q2), 
+                 id = "Prisoner_ID",
+                 tx = c("Pre_Treatment","Treatment","Post_1_Treatment","Post_2_Treatment"))
+colnames(ldata) <- c("id","tx","score") #name the columns to variable names (iv/dv)
+head(ldata) #the head() function prints the 1st six rows of the data.frame
+```
+
+Run the ANOVA: 
+
+```{r, warning=FALSE}
+ezANOVA(
+  data = ldata,
+  wid = id, #this asks for the participant's ID
+  within = tx, #the "within-subjects" condition
+  dv = score, #the dependent variable
+  type =3 #this asks for a certain type of math - type 3 SPSS-comparable results
+)
+#Mauchly's test of sphericity is not significant, assumptions are met without need
+#of corrections.
+```
+
+### 2.b. During treatment the prisoners are housed in a special unit, and as a result the behaviour score for the year of treatment may not be comparable to the measures taken before and after treatment. Reanalyse the data excluding this data point. 
+
+Now we're going to run it again minus the "Treatment" condition (2 ways to do this):
+
+```{r, warning=FALSE}
+ezANOVA(
+  data = ldata[which(ldata$tx!="Treatment"),], #subsetting out the condition
+  wid = id,
+  within = tx,
+  dv = score,
+  type =3
+)
+
+#or re-fitting the data in the 'melting' process...
+ldata2 <- melt(data.frame(Ex8Q2[,-3]), 
+               id = "Prisoner_ID",
+               tx = c("Pre_Treatment","Post_1_Treatment","Post_2_Treatment"))
+colnames(ldata2) <- c("id","tx","score") #name the columns to variable names (iv/dv)
+
+ezANOVA(
+  data = ldata2,
+  wid = id,
+  within = tx,
+  dv = score,
+  type =3
+)
+```
+
+The result is still significant. 
+
+### 2.c. The psychologist planned to compare the behaviour at one year and two years post treatment with the behaviour prior to treatment. Undertake a contrast which includes these comparisons. 
+
+Given that I'm using another package to calculate the repeated measures ANOVA, I'm not able to conduct post-hoc tests because I'm not getting so much an "object" as a "list" with the results. Instead, I complete comparisons using paired samples t-tests, using my "wide" data (original or raw data)
+
+```{r}
+
+t.test(Ex8Q2$Pre_Treatment,Ex8Q2$Post_1_Treatment, paired = TRUE) #significant
+t.test(Ex8Q2$Pre_Treatment,Ex8Q2$Post_2_Treatment, paired = TRUE) #not significant
+```
+
+The other option is using `pairwise.t.test()`, which takes the values of a vector (x) by groups (g)... for which I can use the "long data" that I created for the repeated measures ANOVA. This is important because if I were doing a lot of these I wouldn't want to keep switching between the two. It helps for preventing errors and increasing reproducibility. It also lets me use p-value adjustments (e.g., "Bonferroni" correction). 
+
+```{r}
+pairwise.t.test(ldata2$score, ldata2$tx, p.adjust.method = "bonf", paired = TRUE)
+#Using Bonferroni correction
+```
+
+Two paired-samples t-tests were conducted to compare the means between pre-treatment behavior scores and one- and two-year post-treatment scores. There was a significant difference in the scores for pre-treatment (M = 70.9, SD = 24.6) and one-year post-treatment (M = 46.3, SD = 15.9) behavior scores; t(11) = 0.92, \(p\) = 0.009. On the other hand, there is no significant difference between pre-treatment (M = 70.9, SD = 24.6) and two-year post-treatment (M = 65.6, SD = 19.9) behavior scores; t(11) = 0.92, \(p\) = .378. 
+
+### 2.d. What would you conclude about the effectiveness of this treatment?
+
+The treatment seems to be effective but only for the short term. There is a large effect size (\(\eta^2\) = 0.385, CI~95~ = -0.035, 0.810).   
+
+### 3. It has been suggested that some dyslexic children are affected by the colour of the paper and text when trying to read, possibly because they find the “glare” of white paper off-putting. To investigate this 15 dyslexic and 15 non-dyslexic male year 7 school pupils were tested. All participants were asked to read 3 matched passages as quickly and accurately as possible. The time taken to read each passage was recorded and a 5 second penalty was added for each error made. One passage was presented in white on black paper (W/B), one printed in black on white paper (B/W) and one in black on yellow (B/Y). Each participant saw each colour combination once, and the order in which the passages were read and the pairing of passage to colour combination were determined at random for each child. The data from this study are tabulated in Table 1 below. 
+
+### 3.a. Describe the design of this study. 
+
+This study is a 2x3 mixed factorial design. 
+
+### 3.b. Prepare a data file for this study. 
+
+```{r}
+df <- data.frame(id = 1:20,
+                 type = factor(c(rep("dys",10),rep("non",10))),
+                 wb = c(40,48,39,40,46,52,61,41,53,42,28,21,23,30,26,20,26,30,23,20),
+                 bw = c(45,50,38,38,43,50,58,40,55,38,30,25,24,28,32,24,25,27,20,21),
+                 by = c(44,51,40,37,44,53,56,39,57,45,32,24,23,27,29,22,25,26,32,22)
+                 )
+head(df) 
+```
+
+### 3.c. Analyse the data to determine whether there is any evidence that text/paper colour combination affects reading speed in dyslexic children. 
+
+```{r}
+df %>%
+  filter(type == "dys")%>%
+  summarise_at(.vars = c("wb","bw","by"),mean)
+(46.2 + 46.6)/2 - 45.5 #0.9 second slower for black on white paper. but is it sig?
+```
+
+```{r, include=FALSE}
+#wrangle the data - won't print because 'inlcude = FALSE'
+ldata3 <- melt(df[,-2],
+               id = "id",
+               score = c("wb","bw","by")
+               )
+ldata3$type <- rep(NA, 60)
+ldata3$type[which(ldata3$id == 1:10)] <- "dys"
+ldata3
+ldata3$type[which(ldata3$id == 11:20)] <- "non"
+ldata3$type <- as.factor(ldata3$type)
+ldata3
+colnames(ldata3) <- c("id","ink_pap","read_speed","type")
+```
+
+### 3.d. Write the results section of a report describing the outcome of this study. 
+
+```{r}
+str(ldata3) 
+#str shows the "structure" of the data, helps fit the model below
+
+aov.fit4 <- aov(read_speed ~ ink_pap, data = ldata3[ldata3$type == "dys",])
+
+#summarize model
+summary(aov.fit4) 
+#model not significant
+
+#post-hoc just for kicks
+TukeyHSD(aov.fit4) 
+#also goose-egg
+```
+
+For individuals with dyslexia, there was no significant effect of color of ink/paper on reading speed at the \(p\) < .05 for three conditions (\(F\)(2,77) = 0.058, \(p\) = .943). 
+
+```{r, warning=FALSE}
+aov.fit5 <- aov(read_speed ~ type, data = ldata3)
+summary(aov.fit5) 
+TukeyHSD(aov.fit5)
+
+ldata3 %>%
+  group_by(type) %>%
+  dplyr::select(read_speed)%>%
+  summarize_all(mean)
+46.1 - 25.5
+
+ezANOVA(
+  data = ldata3,
+  wid = id,
+  between = type,
+  dv = read_speed,
+  type =3
+)
+```
+
+However, the 2x3 ANOVA model including the two groups (dyslexic/non-dyslexic) revealed that, as expected, dyslexia had a significant main effect on reading time F(1, 18) = 70.68, \(p\) < .001, \(\eta^2\) = 0.79 [^1]
+
+[^1]:Cohen's \(f\) = `sqrt(.79/(1-.79))`; to make sure my scientific notation skills are on par -> 1.198907e-07 < .001 = `r 1.198907e-07 < 0.001` 
+
+\clearpage
+# Dataset 3 - ANCOVA & MANOVA 
+
+### 1. A psychologist who is interested in aggression has devised an experimental paradigm in which participants play a computer game with an opponent. When the opponent makes an error the participant is invited to “punish” their opponent by exposing him to a blast of loud noise. The duration and volume of the noise blast are combined to give a measure of aggression. A total of 60 participants were tested using this procedure before being given feedback about their performance in the game. One third of the participants received negative feedback, one third received positive feedback and the remaining third received neutral feedback. Finally, the participants played the game again and their level of aggression was measured as before. The data from this study can be found in the file Ex10Q1.sav.
+
+```{r}
+Ex10Q1 <- read_sav("Ex10Q1.sav")
+str(Ex10Q1)
+```
+
+### 1.a. Undertake an ANOVA to determine whether the post-feedback levels of aggression are affected by feedback. 
+
+Fit ANOVA
+
+```{r}
+aov.fit6 <- aov(Post_Test ~ as.factor(Condition), data = Ex10Q1)
+summary(aov.fit6) 
+```
+
+Post-test levels of aggression are affected by feedback. 
+
+### 1.b. Participants were randomly assigned to each of the three feedback conditions, and as a result the pre-test scores for these three groups should not differ. Test whether this is the case.
+
+Test the pre-test for differences
+
+```{r}
+summary(aov(Pre_test ~ as.factor(Condition), data = Ex10Q1))
+#nope - problem! 
+```
+
+There is clearly a difference in the pretest. 
+
+### 1.c. In light of the answer to the previous question, use the pre-test scores as a covariate and re-examine the effect of feedback on aggression.
+
+To run the ANCOVA, include the "covariant" variable(s) `Pre_test` *in front* of the IV in the formula.
+
+```{r}
+summary(aov(Post_Test ~ Pre_test + as.factor(Condition), data = Ex10Q1))
+
+```
+This shows that when the `Pre_test` is included in the formula, the main effect for `Condition` is not significant. 
+
+Option 2 - create a gain score - subtract pre_test scores from post_test.
+
+```{r}
+Ex10Q1$gain <- Ex10Q1$Post_Test - Ex10Q1$Pre_test
+#create new variable gain score
+
+summary(aov(gain ~ as.factor(Condition), data = Ex10Q1))
+#run one-way ANOVA
+```
+
+### 1.d. How does the inclusion of pre-test aggression as a covariate change the outcome of the analysis? 
+
+With the inclusion of pre-test as a covariate, the \(p\) value decreases and the \(F\) statistic increases. 
+
+```{r, warning=FALSE}
+TukeyHSD(aov(Post_Test ~ as.factor(Condition) * Pre_test, data = Ex10Q1))
+```
+
+### 1.e. What should the psychologist conclude regarding the effect of feedback on aggression?
+
+The psychologist should conclude that *some* of the difference in the `post_test` is essentially accounted for in the `pre_test`. Additionally, the kind of feedback has an effect on aggression. The biggest, and only significant, difference is noted between "positive" and "neutral" feedback. 
+
+### 2. Geiselman and colleagues 1 developed the Cognitive Interview (CI) to help police officers obtain accurate information from witnesses. Research has demonstrated that the use of the CI results in an increase in recall for the details of an event, however, there is less evidence that the CI results in more accurate descriptions of the people involved in the event. A psychologist has developed a new interview, which she calls the “Visual Interview” (VI) which is specifically designed to help witness describe the people they saw. A group of 20 participants watched a video of two actors performing a number of actions. After a delay of 24 hours the participants were interviewed using the CI or the VI. Each participant’s description of the actions was scored out of 100 and their description of the appearance of the actors was scored out of 60. The data are contained in file Ex10Q2.sav.
+
+```{r}
+Ex10q2 <- read_sav("Ex10q2.sav")
+head(Ex10q2)
+```
+
+### 2.a. Describe the design of this study
+
+2x2 mixed design
+
+### 2.b. Check your data to determine whether it is appropriate for analysis using MANOVA.  
+
+Test data to ensure it is appropriate.
+
+Correlations are checked between the dependent variables to check for correlations above .8, which can be problematic:
+
+```{r}
+#Pearson's product-moment correlation  
+cor.test(Ex10q2$Memory_Events,Ex10q2$Memory_People) 
+#0.24 - no problem found
+```
+
+Test for normality:
+
+```{r}
+#Shapiro-Wilk test 
+shapiro.test(Ex10q2$Memory_Events) 
+#normal
+shapiro.test(Ex10q2$Memory_People) 
+#normal
+leveneTest(Ex10q2$Memory_People, as.factor(Ex10q2$Interview))
+leveneTest(Ex10q2$Memory_Events, as.factor(Ex10q2$Interview))
+#homogeneity of variance
+```
+
+Data is appropriate.
+
+### 2.c. The psychologists hypothesised that the VI would result in better memory for the appearance of the actors, but that there would be no difference between the VI and CI groups for recall of the events. She predicted that this relationship would hold for both short and long delays. Analyse the data to test these hypotheses.  
+
+There are no observations provided in this dataset for delay. 
+
+### 2.d. Assuming these results are reliable, what are the implications with regard to how police should interview witnesses?
+
+Fit the model:
+
+```{r}
+manova.fit <- manova(as.matrix(Ex10q2)[,3:4] ~ Ex10q2$Interview)
+manova.fit
+
+summary(manova.fit, test = "Pillai") 
+#Pillai's Trace is the most robust test
+summary(aov(Memory_Events ~ Interview, Ex10q2)) 
+#not sig
+summary(aov(Memory_People ~ Interview, Ex10q2)) 
+#significant
+eta_sq(aov(Memory_People ~ Interview, Ex10q2),partial = T, ci.lvl = 0.95) 
+#effect size and confidence intervals
+```
+
+Assumptions of homogeneity of variance-covariance matrices and equality of variance were confirmed, and small correlations were found among the dependent variables. There was a significant difference between the two interview types, \(F\)(2,17) = 4.892,  \(p\)  = .021, Pillai's Trace = .365. Analyses of the independent variables (Bonferroni adjusted \(\alpha\) = `.05/2`), showed that the 'memory events' condition did not significantly differ between interviews \(F\)(1,18) = 0.42,  \(p\)  = .525. Significant differences in interview were found for the 'memory people' condition \(F\)(1,18) = 7.04,  \(p\)  = .016. Individuals who had the Cognitive Interview (CI) had a lower mean score on 'memory people' condition (\(M\) = 28.6) than the individuals who had the Visual Interview (VI) (\(M\) = 38.1). There was a large effect size, \(\eta_p^2\) = .281, 95% CI [0.009, 0.531]. 
+
+Police should use the Visual Interview (VI) to interview witnesses about people given that there is a statistically significant difference of approximately 9.5 points in accuracy. 
+
+\clearpage
+# Dataset 4 - Correlation 
+
+### These exercises have been prepared for use in conjunction with Chapter 6 of the 5th edition of “SPSS for Psychologists” by Brace, Kemp and Snelgar (2012). This exercise uses the data file Employee data.sav which we corrected as part of Exercise 5. Load the corrected file now
+
+```{r, include=FALSE}
+Employee_data <- read_sav("Employee data (corrected).sav")
+```
+
+### 1. Is there any evidence of a correlation between starting salary and current salary? What is the magnitude and direction of the correlation and is it statistically significant? What does this tell us?
+
+Correlation between starting and current salary
+
+```{r}
+head(Employee_data)
+
+cor.test(Employee_data$salbegin, Employee_data$salary)
+```
+
+This relationship is highly correlated and significant (r = .88, N = 474, \(p\) < .001).
+
+### 2. Draw a scattergram to illustrate the relationship between starting salary and current salary. Add a regression line to the scattergram.
+
+"Scatterplot"
+
+```{r, warning=FALSE}
+Employee_data%>%
+  dplyr::select(salbegin,salary)%>% 
+  ggplot(aes(x = salary , y = salbegin)) + geom_point() +
+  geom_smooth(method = "lm") + theme_bw() + ggtitle("My Scatterplot")
+```
+
+### 3. What percentage of the variance in current salary is explained by starting salary?
+
+Percentage of variance (regression)
+
+```{r}
+summary(lm(salbegin~salary, data = Employee_data))
+```
+
+Approximately 77% of the variance (\(F\)(1, 472) = 1622, \(p\) < .001). 
+
+### 4. Produce a correlation matrix showing the correlations between the following variables: beginning salary, current salary, time in the job, previous experience. 
+
+Correlation matrix
+
+```{r}
+cor(Employee_data[,6:9]) #accomplished with subsetting [ ]
+```
+
+### 5. Examine the correlation matrix and identify which of these correlations are statistically significant. 
+
+Significant correlations 
+
+```{r}
+cor.test(Employee_data$prevexp,Employee_data$salary) #yes
+cor.test(Employee_data$jobtime,Employee_data$salary) #no (p = .07)
+```
+
+### 6. Which two variables are significantly negatively correlated? Can you suggest possible reasons for this relationship?  
+
+There is a weak, but significant, negative correlation is between previous experience and current salary (r = -.1, \(p\) = .03). Maybe previous experience led to some bad habits that are holding people back? 
+
+### 7. An organisational Psychologist wants to know whether there is a relationship between education and current salary. What is the most appropriate statistical test to use for this analysis? Justify your answer. Is the correlation significant?
+
+Relationship between education and current salary. 
+
+```{r}
+gvlma(lm(educ ~ salary, data = Employee_data)) #assumptions not acceptable for skewness
+qqplot(Employee_data$educ,Employee_data$salary) #also seen in q-q plot
+```
+
+The best statistical test is Spearman's Rho - the data is not continuous, nor normally distributed. 
+
+```{r}
+cor.test(Employee_data$educ,Employee_data$salary, method = "spearman")
+```
+
+There was a significant difference between education and salary (\(r_s\) = 0.69, \(N\) = 474, \(p\) < .001). 
+
+\clearpage
+# Dataset 5 - Binary Logistic Regression 
+
+### These exercises have been prepared for use in conjunction with Chapter 11 of the 5th edition of “SPSS for Psychologists” by Brace, Kemp and Snelgar (2012) 
+
+```{r, include=FALSE}
+logdata <- read_sav("Ex11q1.sav")
+```
+
+### 1. A psychologist is interested in how radiographers learn to interpret ambiguous x-ray images. He recruited a number of trainee radiographers. Each was shown an x-ray and asked to determine whether or not it showed a fracture. The psychologist recorded the number of hours of training the radiographer had completed, whether the x-ray showed a fracture or not, and whether the radiographer’s decision was correct. The data from this study are coded in the file Ex11Q1.sav.  
+
+### 1.a. Identify the outcome and predictor variables. Which of the predictor variables are categorical?
+
+```{r}
+head(logdata)
+logdata$Training 
+#predictor - cont.
+logdata$X_ray 
+#predictor - cat.
+
+logdata$correct 
+#outcome - cat. 
+```
+
+### 1.b. Carry out the appropriate analysis to determine which of the predictor variables significantly predict the radiographer’s interpretation of the x-ray.
+
+```{r, warning=FALSE}
+model <- glm(correct ~ Training, data = logdata, family = "binomial")
+summary(model) #z value is "Wald"
+lrm(model) # "Model Likelihood Ratio" to get X^2 results
+confusion_matrix(model) #to produce confusion matrix
+18/20 #percentage hit for correct
+14/15 #percentage hit for incorrect
+(18/20 + 14/15)/2 #0.916 overall accuracy
+confint(model) #to get confidence intervals
+```
+
+```{r, fig.cap="Visualization of Logistic Regression Model"}
+visualize_model(model) #plot the model 
+points(logdata$correct, pch=20) #put in the points
+```
+
+### 1.c. Report the results of your analysis.
+
+Results
+
+A logistic regression was performed with the correct result of x-rays as the dependent variable and training in months as well as x-ray as predictor variables. A total of 35 observations were analyzed and the full model significantly predicted rates of correct outcomes (omnibus \( \chi^2 \) = 35.12, df = 1, \(p\) < .001). The model accounts for 85% of the variance of correct outcomes, with approximately a 90% accuracy for correct outcomes and 93% accuracy for incorrect outcomes. Overall, the model was 91.6% accurate. The values of the coefficients reveal that the increase of one month of training increases the odds of getting a correct outcome by 2.28 (CI~95~ = 0.99, 5.48).
+
+### 2. Load the data file called EX11Q2.sav. This is a demonstration data file which for many years was supplied with every copy of SPSS (and called ‘1991 U.S. General Social Survey.sav’) but is not with recent versions. Open the data file and familiarise yourself with the variables. This file contains more than 40 variables for each of about 1500 respondents. 
+
+```{r, include=FALSE}
+logdata2 <- read_sav("EX11Q2.sav")
+```
+
+### 2.a We are interested in which factors predict happiness. The fourth variable in the file is called “Happy” and codes the respondents’ general level of happiness using a 3 point scale (1=Very Happy, 2= Pretty Happy, 3=Not too Happy), with the values 0, 8 and 9 set as missing values. Recode this variable so that it codes whether or not the respondent is Very Happy (Very Happy= 1, Pretty Happy or Not too Happy = 0). Make sure that that the missing values are still set to 0, 8 and 9.
+
+```{r}
+any(logdata2[,"happy"] == 8)|any(logdata2[,"happy"] == 0)|any(logdata2[,"happy"] == 9)
+#confirmed NA's
+
+logdata2$recode <- rep(NA, length(logdata2$happy))
+ncol(logdata2)
+
+logdata2[which(logdata2$happy == 1),44] <- 1
+logdata2[which(logdata2$happy == 2|logdata2$happy == 3),44] <- 0
+
+head(as.vector(logdata2$recode),20)
+
+```
+
+### 2.b. Is the secret to being very happy having a large family, a good education or is happiness something that comes with age? To discover the secret to happiness undertake a Binary Logistic regression using the four variables age, education, number of siblings and number of children as predictor variables, and your recoded happiness variable as the dependent variable.
+
+```{r}
+model2 <- glm(recode ~ childs + age + educ + sibs, data = logdata2, family = "binomial")
+summary(model2) #z value is "Wald"
+lrm(model2) # "Model Likelihood Ratio" to get X^2 results
+```
+
+### 2.c. Which of these factors significantly predict Happiness?
+
+Age and education. 
+
+### 2.d. Does your model really hold the secret of great happiness? Just how good a model is it?
+
+```{r}
+confusion_matrix(model2) #to produce confusion matrix
+1013/1020 #percentage hit for unhappy
+6/464 #percentage hit for happy
+(1013/1020 + 6/464)/2 #0.50 overall accuracy
+confint(model2) #to get confidence intervals
+```
+
+Unfortunately no. It's about 50% accurate - almost exactly as accurate as a coin toss. 
+
+\clearpage 
+# Dataset 6 - Factor Analysis 
+
+These exercises have been prepared for use in conjunction with Chapter 12 of the 5th edition of “SPSS
+for Psychologists” by Brace, Kemp and Snelgar (2012)
+
+### 1. A psychologist was interested in whether a mindfulness questionnaire measured a single dimension, or whether it had more than one dimension. The data from this study are recorded in the file Ex12.sav. The questionnaire contained 15 items each requiring a response in the range 1 to 6. The responses are coded in the variables s1q1 to s1q15.
+
+```{r, include=FALSE}
+Ex12 <- read_sav("Ex12.sav")
+```
+
+### 1.a. Carry out a principal component analysis with direct oblimin rotation.
+
+```{r}
+which(is.na(Ex12)) #found missing data = problem
+
+#rectify
+pcdata <- na.omit(Ex12) 
+head(pcdata)
+#done 
+
+#fit the model
+(pca <- psych::pca(pcdata, rotate = "oblimin")) 
+#here I have to specify psych:: package because sjstats 'masks' pca function
+summary(pca)
+```
+
+This principal components analysis confirms that 1 factor is sufficient. 
+
+### 1.b. State as many of the indicators of factorability as you can. For each, check and report what they indicate about the factorability of this data set. NB for those without a test of significance, simply give an impression; as in the book, you don't need to give counts.
+
+??? Need more information about the data. 
+
+### 1.c. How many components have eigenvalue greater than one? Write a brief results section, with suitable table, to report which items load on each component.
+
+```{r}
+mat <- cor(pcdata)
+
+eigen(mat)$values 
+#The first three components have an Eigenvalue greater than 1.
+```
+
+I really wouldn't keep any more than one component. Items 14, 7, 12, 8, 10, and 3 load strongest on PC1. 
+
+### 1.d. Consider the scree plot: how many components does that suggest?
+
+Scree Plot
+
+```{r, fig.cap="Scree Plot"}
+plot(eigen(mat)$values, type = "l", ylab = "Eigenvalues",
+     xlab = "Factors")
+points(eigen(mat)$values, pch = 20)
+abline(h = 1, lty = 2) 
+```
+
+The biggest "drop-off" takes place between factors 1 and 2. I would not retain more than one factor. This is confirmed by `1.f.`
+
+### 1.e. How would you alter the analysis to assess which items load onto a single component? Do that, and report the results.
+
+??? Alter the analysis? Why?
+
+### 1.f. What other analysis/es might you conduct when considering the questionnaire?
+
+Alternative methods - none in SPSS.
+
+```{r, warning=FALSE}
+factanal(pcdata, factors = 1) 
+#this is part of the base r stats package and confirms the prior "pca" test
+
+vss(pcdata, rotate = "oblimin")
+#VSS stands for Very Simple Structure, which is a method included in the `psych` package. 
+#It provides a plot depicting the "factors" and explicitly states what complexity is achieved
+#with what number of factors. 
+
+paran(pcdata, iterations = 5000) 
+#This method is by far the most robust - it follows Horn's Parallel Analysis and employs 
+#bootstrapping (shown here with 5000 iterations). 
+```
+   
