@@ -25,7 +25,12 @@ library(GPArotation) #factor analysis
 library(paran) #Horn's parallel analysis 
 library(sjstats) #anova_stats() provides effect sizes 
 options(tinytex.verbose = TRUE)
+options(scipen = 10) #this gets rid of scientific notation for very small p's
 ```
+# Introduction
+
+This document provides a step-by-step comprehensive process for completing the MHS7730 Advanced Research dataset work in R. For access to the RMarkdown file, see: https://github.com/gcasteleiro/adv_research. 
+
 # Dataset 1 - Multiple Regression 
 
 ## 1. Load the data file called EX9Q1.sav. This is a demonstration data file which for many years was supplied with every copy of SPSS (and called ‘1991 U.S. General Social Survey.sav’) but is not with recent versions. 
