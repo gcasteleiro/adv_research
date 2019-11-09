@@ -393,7 +393,7 @@ ezANOVA(
 
 However, the 2x3 ANOVA model including the two groups (dyslexic/non-dyslexic) revealed that, as expected, dyslexia had a significant main effect on reading time F(1, 18) = 70.68, \(p\) < .001, \(\eta^2\) = 0.79 [^1]
 
-[^1]:Cohen's \(f\) = `sqrt(.79/(1-.79))`; to make sure my scientific notation skills are on par -> 1.198907e-07 < .001 = `r 1.198907e-07 < 0.001` 
+[^1]:Cohen's \(f\) = `r sqrt(.79/(1-.79)) #this calculates in-line`; to make sure my scientific notation skills are on par -> 1.198907e-07 < .001 = `r 1.198907e-07 < 0.001 #this will result in a logical statement (TRUE/FALSE)` 
 
 \clearpage
 # Dataset 3 - ANCOVA & MANOVA 
